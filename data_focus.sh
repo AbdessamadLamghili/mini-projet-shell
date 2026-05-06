@@ -1,8 +1,5 @@
 #!/bin/bash
-# ============================================================
-#  TrinityOPS v2.0 — Advanced File Management System
-#  Author: TrinityOPS
-# ============================================================
+
 
 set -euo pipefail
 
@@ -42,7 +39,7 @@ log_event() {
     fi
 }
 
-# ─── OUTPUT HELPERS ───────────────────────────────────────
+# ─── OUTPUT HELPERS 
 info()    { echo -e "${CYAN}[INFO]${RESET}  $*"; }
 success() { echo -e "${GREEN}[OK]${RESET}    $*"; }
 warn()    { echo -e "${YELLOW}[WARN]${RESET}  $*" >&2; }
@@ -64,13 +61,13 @@ progress_bar() {
     [[ "$current" -ge "$total" ]] && echo || true
 }
 
-# ─── SETUP ────────────────────────────────────────────────
+# ─── SETUP 
 setup_dirs() {
     mkdir -p "$DATA_DIR" "$ARCHIVE_DIR"
     touch "$LOG_FILE"
 }
 
-# ─── LOCK MANAGEMENT ──────────────────────────────────────
+# ─── LOCK MANAGEMENT
 acquire_lock() {
     if [[ -f "$LOCK_FILE" ]]; then
         local pid
@@ -86,7 +83,7 @@ release_lock() {
     rm -f "$LOCK_FILE"
 }
 
-# ─── HELP ─────────────────────────────────────────────────
+# ─── HELP 
 show_help() {
     echo -e "
 ${BOLD}${BLUE}╔══════════════════════════════════════════════════════╗
@@ -126,7 +123,7 @@ ${BOLD}EXEMPLES:${RESET}
 "
 }
 
-# ─── FORK: FILE SORTING ───────────────────────────────────
+# ─── FORK: FILE SORTING 
 sort_files_fork() {
     header "FORK — Tri des fichiers par extension"
     log_event "INFO" "Démarrage du tri par extension"
@@ -168,7 +165,7 @@ sort_files_fork() {
     log_event "INFO" "Tri par extension terminé"
 }
 
-# ─── THREAD: ENCRYPTION ───────────────────────────────────
+# ─── THREAD: ENCRYPTION 
 encrypt_data_thread() {
     header "THREAD — Chiffrement des fichiers sensibles"
     log_event "INFO" "Chiffrement des données en cours"
@@ -212,7 +209,7 @@ encrypt_data_thread() {
     fi
 }
 
-# ─── SUBSHELL: STATISTICS ─────────────────────────────────
+# ─── SUBSHELL: STATISTICS 
 generate_stats_subshell() {
     header "SUBSHELL — Rapport statistique"
     (
@@ -245,13 +242,13 @@ ${BOLD}  Taille totale :${RESET} $total_size
     log_event "INFO" "Rapport statistique généré"
 }
 
-# ─── RESTORE ──────────────────────────────────────────────
+# ─── RESTORE 
 restore_archives() {
     header "RESTORE — Restauration des fichiers"
     local count
     count=$(find "$ARCHIVE_DIR" -maxdepth 1 -mindepth 1 -type f | wc -l)
 
-    # Only restore non-archive files — skip .tar.gz backups
+    
     local restorable
     restorable=$(find "$ARCHIVE_DIR" -maxdepth 1 -mindepth 1 -type f ! -name "*.tar.gz" | wc -l)
 
@@ -268,7 +265,7 @@ restore_archives() {
     fi
 }
 
-# ─── COMPRESS ─────────────────────────────────────────────
+# ─── COMPRESS 
 compress_data() {
     header "COMPRESS — Archivage des données"
     local archive_name="backup_$(date +%Y%m%d_%H%M%S).tar.gz"
@@ -295,7 +292,7 @@ compress_data() {
     fi
 }
 
-# ─── DECOMPRESS ───────────────────────────────────────────
+# ─── DECOMPRESS 
 decompress_data() {
     local target_archive="${1:-}"
     header "DECOMPRESS — Extraction d'archive"
@@ -331,7 +328,7 @@ decompress_data() {
     fi
 }
 
-# ─── PRUNE ────────────────────────────────────────────────
+# ─── PRUNE 
 prune_system() {
     header "PRUNE — Nettoyage du système"
     local tmp_count enc_count
@@ -358,7 +355,7 @@ prune_system() {
     fi
 }
 
-# ─── VERIFY TOOLS ─────────────────────────────────────────
+# ─── VERIFY TOOLS 
 verify_tools() {
     header "VERIFY — Vérification des outils requis"
     local tools=("tar" "find" "du" "wc" "date" "mktemp" "tail" "cut")
@@ -385,7 +382,7 @@ verify_tools() {
     fi
 }
 
-# ─── VIEW LOGS ────────────────────────────────────────────
+# ─── VIEW LOGS 
 view_logs() {
     local n="${1:-10}"
     header "LOGS — ${n} dernières entrées"
@@ -404,7 +401,7 @@ view_logs() {
     done
 }
 
-# ─── STATUS ───────────────────────────────────────────────
+# ─── STATUS 
 show_status() {
     header "STATUS — État du système TrinityOPS"
     local data_files arc_files log_lines
@@ -426,7 +423,7 @@ show_status() {
     log_event "INFO" "Statut système affiché"
 }
 
-# ─── MAIN ENTRYPOINT ──────────────────────────────────────
+# ─── MAIN ENTRYPOINT 
 main() {
     setup_dirs
 
