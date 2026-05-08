@@ -26,7 +26,11 @@ log() {
     local entree="$horodatage : $utilisateur : $niveau : $message"
     echo "$entree" >> "$LOG_FILE"
     if [ "$niveau" = "ERROR" ]; then
-        echo "ERREUR: $message" >&2
+        echo -e "\e[31mERREUR: $message\e[0m" >&2
+    elif [ "$niveau" = "WARNING" ]; then
+        echo -e "\e[33mWARNING: $message\e[0m"
+    elif [ "$niveau" = "INFO" ]; then
+        echo -e "\e[34m$message\e[0m"
     else
         echo "$message"
     fi
@@ -42,7 +46,13 @@ init() {
         exit $ERR_LOG_DIR
     fi
     touch "$LOG_FILE"
-    log "INFO" "=== Module sécurité démarré ==="
+    echo -e "\e[34m"
+echo "  ╔══════════════════════════════════════════╗"
+echo "  ║     MODULE SURVEILLANCE SÉCURITÉ         ║"
+echo "  ║             TrinityOps                   ║"
+echo "  ╚══════════════════════════════════════════╝"
+echo -e "\e[0m"
+log "INFO" "=== Module sécurité démarré ==="
 }
 
 # ============================================
@@ -73,6 +83,7 @@ OPTIONS:
   -t   THREAD  : Détection d'attaques brute force
   -s   SUBSHELL: Vérification d'intégrité MD5 des fichiers
   -l   LOG     : Afficher le journal de sécurité
+  -w   WATCH  : Surveillance continue (ex: -w 30 pour toutes les 30s)
 
 CODES D'ERREUR:
   100 : Option invalide
@@ -85,6 +96,7 @@ EXEMPLES:
   sudo bash module_securite.sh -t
   sudo bash module_securite.sh -s
   sudo bash module_securite.sh -l
+  sudo bash module_securite.sh -w 30
 
 LOG: $LOG_FILE
 EOF
@@ -188,7 +200,7 @@ analyser_bruteforce() {
             # Vérifier si une IP dépasse le seuil
             while read count ip; do
                 if [ "$count" -ge "$SEUIL_BRUTE" ]; then
-                    echo "ALERTE : $ip a tenté $count fois !"
+                    echo -e "\e[31mALERTE : $ip a tenté $count fois !\e[0m"
                     log "ERROR" "BRUTE FORCE détecté : $ip — $count tentatives"
                 fi
             done <<< "$resultats"
@@ -265,10 +277,10 @@ verifier_md5() {
                         echo "NOUVEAU fichier détecté : $fichier"
                         md5sum "$fichier" >> "$REFERENCE_MD5"
                     elif [ "$empreinte_actuelle" = "$empreinte_reference" ]; then
-                        echo "OK : $fichier"
+                        echo -e "\e[32mOK : $fichier\e[0m"
                         log "INFO" "Intégrité OK : $fichier"
                     else
-                        echo "ALERTE : $fichier a été modifié !"
+                        echo -e "\e[31mALERTE : $fichier a été modifié !\e[0m"
                         log "ERROR" "FICHIER MODIFIÉ : $fichier"
                         alerte=1
                     fi
@@ -315,6 +327,67 @@ afficher_logs() {
     echo "Total lignes : $(wc -l < $LOG_FILE)"
 }
 
+# ============================================
+# Fonction : surveiller_watchmode()
+# ============================================
+surveiller_watchmode() {
+    local intervalle="${1:-30}"
+
+    echo -e "\e[34m"
+    echo "  ╔══════════════════════════════════════════╗"
+    echo "  ║         MODE SURVEILLANCE ACTIVE         ║"
+    echo "  ║     Intervalle : ${intervalle}s — Ctrl+C pour quitter  ║"
+    echo "  ╚══════════════════════════════════════════╝"
+    echo -e "\e[0m"
+
+    log "INFO" "=== Watchmode démarré (intervalle : ${intervalle}s) ==="
+
+    local iteration=1
+
+    while true; do
+        echo -e "\e[34m--- Itération $iteration — $(date '+%H:%M:%S') ---\e[0m"
+
+        # Analyse brute force
+        resultats=$(grep "Failed password" /var/log/auth.log 2>/dev/null \
+            | awk '{print $11}' \
+            | sort | uniq -c \
+            | sort -rn)
+
+        if [ -n "$resultats" ]; then
+            while read count ip; do
+                if [ "$count" -ge "$SEUIL_BRUTE" ]; then
+                    echo -e "\e[31mALERTE BRUTE FORCE : $ip — $count tentatives\e[0m"
+                    log "ERROR" "WATCHMODE — BRUTE FORCE : $ip — $count tentatives"
+                fi
+            done <<< "$resultats"
+        else
+            echo -e "\e[32mAucune attaque détectée\e[0m"
+        fi
+
+        # Vérification MD5
+        if [ -f "$REFERENCE_MD5" ]; then
+            fichiers=("/etc/passwd" "/etc/shadow" "/etc/hosts" "/bin/bash")
+            for fichier in "${fichiers[@]}"; do
+                if [ -f "$fichier" ]; then
+                    empreinte_actuelle=$(md5sum "$fichier" | awk '{print $1}')
+                    empreinte_reference=$(grep "$fichier" "$REFERENCE_MD5" | awk '{print $1}')
+                    if [ -n "$empreinte_reference" ] && [ "$empreinte_actuelle" != "$empreinte_reference" ]; then
+                        echo -e "\e[31mALERTE MD5 : $fichier modifié !\e[0m"
+                        log "ERROR" "WATCHMODE — FICHIER MODIFIÉ : $fichier"
+                    fi
+                fi
+            done
+            echo -e "\e[32mVérification MD5 OK\e[0m"
+        else
+            echo -e "\e[33mPas de référence MD5 — lance -s d'abord\e[0m"
+        fi
+
+        iteration=$((iteration + 1))
+        echo "Prochaine vérification dans ${intervalle}s..."
+        sleep "$intervalle"
+    done
+}
+
 
 # ============================================
 # Point d'entrée principal
@@ -328,13 +401,14 @@ if [ $# -eq 0 ]; then
     exit $ERR_OPTION
 fi
 
-while getopts ":hftsl" opt; do
+while getopts ":hftslw:" opt; do
     case $opt in
         h) afficher_aide ;;
         f) surveillance_ssh_fork ;;
         t) analyser_bruteforce ;;
         s) verifier_md5 ;;
         l) afficher_logs ;;
+        w) surveiller_watchmode "$OPTARG" ;;
         \?) echo "Option invalide : -$OPTARG. Utilise -h pour l'aide."
             exit $ERR_OPTION ;;
     esac
