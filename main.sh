@@ -30,7 +30,7 @@ readonly BASE_DIR="$(cd "$(dirname "$0")" && pwd)"
 readonly SCRIPTS_DIR="${BASE_DIR}/scripts"
 
 # Répertoire de logs par défaut (peut être surchargé par -l)
-DEFAULT_LOG_DIR="/var/log/${PROG_NAME%.*}"
+DEFAULT_LOG_DIR="${BASE_DIR}/logs"
 
 # Répertoire de logs actif (modifiable via -l)
 LOG_DIR="${DEFAULT_LOG_DIR}"
@@ -56,16 +56,18 @@ readonly ERR_INVALID_DIR=104
 readonly ERR_MODULE_FAILED=105
 readonly ERR_LOG_INIT=106
 
-# Liste ordonnée des scripts collègues (chemins relatifs depuis BASE_DIR)
-# -----------------------------------------------------------------------
-# EMPLACEMENT RÉSERVÉ : ces scripts seront développés par chaque collègue.
-# Le script principal vérifie leur existence et les appelle au bon moment.
-# -----------------------------------------------------------------------
+# ------------------------------------------------------------------
+# Chemins des trois scripts métiers du groupe
+# ------------------------------------------------------------------
+readonly SCRIPT_MAINTENANCE="${SCRIPTS_DIR}/auto_maintenance.sh"   # Projet 1 – Automate de Maintenance Système
+readonly SCRIPT_DATA="${SCRIPTS_DIR}/data_focus.sh"                # Projet 4 – Organisateur de Données Big Data
+readonly SCRIPT_SECURITE="${SCRIPTS_DIR}/module_securite.sh"       # Projet 3 – Surveillant de Sécurité & Intrusion
+
+# Tableau ordonné utilisé pour les vérifications de dépendances
 COLLEAGUE_SCRIPTS=(
-    "${SCRIPTS_DIR}/script_collegue_1.sh"   # Module 1 : [description à compléter]
-    "${SCRIPTS_DIR}/script_collegue_2.sh"   # Module 2 : [description à compléter]
-    "${SCRIPTS_DIR}/script_collegue_3.sh"   # Module 3 : [description à compléter]
-    "${SCRIPTS_DIR}/script_collegue_4.sh"   # Module 4 : [description à compléter]
+    "${SCRIPT_MAINTENANCE}"
+    "${SCRIPT_DATA}"
+    "${SCRIPT_SECURITE}"
 )
 
 # ==============================================================================
@@ -83,9 +85,11 @@ SYNOPSIS
     ${PROG_NAME} [OPTIONS] TARGET_DIR
 
 DESCRIPTION
-    Script Bash principal qui coordonne l'exécution de quatre modules spécialisés
-    développés par les membres du groupe. Il supporte plusieurs modes d'exécution
-    (normal, fork, thread, subshell) et centralise la journalisation.
+    Script Bash principal qui coordonne l'exécution de trois modules spécialisés
+    développés par les membres du groupe :
+        • auto_maintenance.sh  – Automate de Maintenance Système
+        • data_focus.sh        – Organisateur de Données Big Data
+        • module_securite.sh   – Surveillant de Sécurité & Intrusion
 
     TARGET_DIR   Répertoire cible obligatoire sur lequel les modules vont opérer.
                  Ce répertoire doit exister et être accessible en lecture.
@@ -99,13 +103,13 @@ OPTIONS
     -t           Mode THREAD : simulation de parallélisme en Bash via sous-processus
                  en arrière-plan. Équivalent fonctionnel au mode fork en Bash pur.
 
-    -s           Mode SUBSHELL : chaque module est exécuté dans un sous-shell isolé
-                 (entre parenthèses). L'environnement du shell parent est préservé.
+    -s           Mode SUBSHELL : les modules sont exécutés dans un sous-shell
+                 isolé (entre parenthèses). L'environnement du shell parent est préservé.
 
     -l LOG_DIR   Spécifie un répertoire personnalisé pour le fichier de log
                  history.log. Par défaut : ${DEFAULT_LOG_DIR}
 
-    -r           RESTORE : réinitialise l'état par défaut du projet.
+    -r           RESTORE : appelle les modules qui supportent la restauration.
                  NÉCESSITE LES PRIVILÈGES ROOT/ADMINISTRATEUR.
 
 FORMAT DES LOGS
@@ -123,34 +127,33 @@ CODES D'ERREUR
     ${ERR_LOG_INIT}   Impossible d'initialiser le répertoire de logs
 
 EXEMPLES
-    # Exécution normale sur /data/projet
-    ./${PROG_NAME} /data/projet
+    # Exécution normale sur /tmp/data
+    ./${PROG_NAME} /tmp/data
 
     # Exécution en mode fork avec log personnalisé
-    ./${PROG_NAME} -f -l /tmp/logs /data/projet
+    ./${PROG_NAME} -f -l /tmp/logs /tmp/data
 
     # Exécution en mode subshell
-    ./${PROG_NAME} -s /data/projet
+    ./${PROG_NAME} -s /tmp/data
 
     # Exécution en mode thread
-    ./${PROG_NAME} -t /data/projet
+    ./${PROG_NAME} -t /tmp/data
 
     # Restauration (root uniquement)
-    sudo ./${PROG_NAME} -r /data/projet
+    sudo ./${PROG_NAME} -r /tmp/data
 
     # Afficher l'aide
     ./${PROG_NAME} -h
 
 ARCHITECTURE DU PROJET
     project/
-    ├── main.sh                     ← Ce script (orchestrateur)
+    ├── main.sh                      ← Ce script (orchestrateur)
     ├── scripts/
-    │   ├── script_collegue_1.sh    ← Module 1 (développé par collègue 1)
-    │   ├── script_collegue_2.sh    ← Module 2 (développé par collègue 2)
-    │   ├── script_collegue_3.sh    ← Module 3 (développé par collègue 3)
-    │   └── script_collegue_4.sh    ← Module 4 (développé par collègue 4)
+    │   ├── auto_maintenance.sh      ← Module 1 – Maintenance Système
+    │   ├── data_focus.sh            ← Module 4 – Big Data
+    │   └── module_securite.sh       ← Module 3 – Sécurité & Intrusion
     └── logs/
-        └── history.log             ← Journal centralisé
+        └── history.log              ← Journal centralisé
 
 VERSION
     ${PROG_NAME} version ${VERSION} - ENSET Mohammedia 2026
@@ -176,13 +179,8 @@ _username() {
 # Usage : log_info "message"
 log_info() {
     local message="$1"
-    # Construction de l'entrée de log au format requis
     local entry="$(_timestamp) : $(_username) : INFOS : ${message}"
-
-    # Affichage dans le terminal (stdout)
     echo "${entry}"
-
-    # Écriture dans le fichier de log (si initialisé)
     if [[ -n "${LOG_FILE}" ]]; then
         echo "${entry}" >> "${LOG_FILE}"
     fi
@@ -192,13 +190,8 @@ log_info() {
 # Usage : log_error "message"
 log_error() {
     local message="$1"
-    # Construction de l'entrée de log au format requis
     local entry="$(_timestamp) : $(_username) : ERROR : ${message}"
-
-    # Affichage dans le terminal (stderr)
     echo "${entry}" >&2
-
-    # Écriture dans le fichier de log (si initialisé)
     if [[ -n "${LOG_FILE}" ]]; then
         echo "${entry}" >> "${LOG_FILE}"
     fi
@@ -209,9 +202,7 @@ log_error() {
 # ==============================================================================
 
 # check_admin : vérifie que le script est exécuté par root (UID=0)
-# En cas d'échec, affiche une erreur et quitte avec le code ERR_NOT_ADMIN
 check_admin() {
-    # $EUID est l'UID effectif de l'utilisateur courant (0 = root)
     if [[ "${EUID}" -ne 0 ]]; then
         log_error "L'option -r (restore) nécessite les privilèges administrateur (root)."
         log_error "Veuillez relancer avec : sudo ${PROG_NAME} -r ${TARGET_DIR}"
@@ -226,31 +217,26 @@ check_admin() {
 # ==============================================================================
 
 # check_dependencies : vérifie que tous les scripts collègues sont présents
-# et exécutables. Journalise le statut de chaque module.
+# et exécutables. Si un script existe mais n'est pas exécutable, corrige les
+# permissions automatiquement. Quitte avec ERR_MISSING_SCRIPT si introuvable.
 check_dependencies() {
     log_info "Vérification des modules externes (scripts collègues)..."
-
-    # Variable de suivi : devient true si au moins un script est manquant
     local all_ok=true
 
-    # Boucle sur chaque script collègue déclaré dans le tableau COLLEAGUE_SCRIPTS
     for script in "${COLLEAGUE_SCRIPTS[@]}"; do
         if [[ -f "${script}" && -x "${script}" ]]; then
-            # Le script existe et est exécutable
-            log_info "  [OK] Module trouvé : ${script}"
+            log_info "  [OK] Module trouvé et exécutable : ${script}"
         elif [[ -f "${script}" && ! -x "${script}" ]]; then
-            # Le script existe mais n'est pas exécutable
             log_error "  [WARN] Module non exécutable : ${script} — Tentative de correction..."
-            chmod +x "${script}" 2>/dev/null && log_info "  [OK] Permissions corrigées : ${script}" \
-                || { log_error "  [ERR] Impossible de corriger : ${script}"; all_ok=false; }
+            chmod +x "${script}" 2>/dev/null \
+                && log_info "  [OK] Permissions corrigées : ${script}" \
+                || { log_error "  [ERR] Impossible de corriger les permissions : ${script}"; all_ok=false; }
         else
-            # Le script est complètement absent
             log_error "  [MANQUANT] Module introuvable : ${script}"
             all_ok=false
         fi
     done
 
-    # Si un ou plusieurs scripts sont absents, on quitte avec ERR_MISSING_SCRIPT
     if [[ "${all_ok}" == false ]]; then
         log_error "Un ou plusieurs modules sont manquants. Vérifiez l'arborescence du projet."
         show_help
@@ -264,13 +250,11 @@ check_dependencies() {
 # SECTION 6 : FONCTION D'INITIALISATION DU RÉPERTOIRE DE LOGS
 # ==============================================================================
 
-# init_log : crée le répertoire de logs et initialise LOG_FILE
+# init_log : crée le répertoire de logs s'il n'existe pas et initialise LOG_FILE
 init_log() {
-    # Création du répertoire de logs s'il n'existe pas encore
     if [[ ! -d "${LOG_DIR}" ]]; then
         mkdir -p "${LOG_DIR}" 2>/dev/null
         if [[ $? -ne 0 ]]; then
-            # Impossible de créer le répertoire (permissions insuffisantes ?)
             echo "ERREUR : Impossible de créer le répertoire de logs : ${LOG_DIR}" >&2
             echo "Conseil : essayez avec sudo, ou spécifiez un autre dossier avec -l" >&2
             show_help
@@ -278,10 +262,8 @@ init_log() {
         fi
     fi
 
-    # Définition du chemin complet du fichier de log
     LOG_FILE="${LOG_DIR}/history.log"
 
-    # Création du fichier s'il n'existe pas
     touch "${LOG_FILE}" 2>/dev/null || {
         echo "ERREUR : Impossible de créer le fichier de log : ${LOG_FILE}" >&2
         exit "${ERR_LOG_INIT}"
@@ -294,88 +276,82 @@ init_log() {
 # SECTION 7 : FONCTION RESTORE (option -r, admin uniquement)
 # ==============================================================================
 
-# restore_defaults : réinitialise l'état par défaut du projet
-# ⚠️ EMPLACEMENT RÉSERVÉ : la logique exacte doit être adaptée au projet final.
-# L'implémentation ci-dessous est générique et non destructive.
+# restore_defaults : appelle auto_maintenance.sh -r et data_focus.sh -r
+# module_securite.sh ne supporte pas -r et n'est donc pas appelé.
 restore_defaults() {
     log_info "=== DÉBUT DE LA RESTAURATION ==="
-    log_info "Restauration de l'état par défaut du projet sur : ${TARGET_DIR}"
+    log_info "Répertoire cible : ${TARGET_DIR}"
 
-    # --- EMPLACEMENT RÉSERVÉ : logique de restauration à personnaliser ---
-    # Exemple générique : suppression des fichiers temporaires produits par les modules
-    # Cette section doit être adaptée selon les fichiers générés par votre projet.
-
-    # Exemple 1 : suppression des fichiers temporaires (.tmp) dans TARGET_DIR
-    log_info "Nettoyage des fichiers temporaires dans ${TARGET_DIR}..."
-    find "${TARGET_DIR}" -maxdepth 2 -name "*.tmp" -type f -print -delete 2>/dev/null \
-        && log_info "Fichiers temporaires supprimés." \
-        || log_error "Aucun fichier temporaire trouvé ou erreur de suppression."
-
-    # Exemple 2 : réinitialisation des permissions sur TARGET_DIR (non destructif)
-    log_info "Réinitialisation des permissions sur ${TARGET_DIR}..."
-    chmod 755 "${TARGET_DIR}" 2>/dev/null \
-        && log_info "Permissions réinitialisées à 755." \
-        || log_error "Impossible de modifier les permissions."
-
-    # Exemple 3 : archivage des anciens logs avant réinitialisation
-    if [[ -f "${LOG_FILE}" ]]; then
-        local archive_name="${LOG_DIR}/history_backup_$(_timestamp).log.gz"
-        log_info "Archivage de l'ancien log → ${archive_name}"
-        gzip -c "${LOG_FILE}" > "${archive_name}" 2>/dev/null \
-            && log_info "Archive créée : ${archive_name}" \
-            || log_error "Échec de l'archivage du log."
+    # --- auto_maintenance.sh : supporte -r avec TARGET_DIR ---
+    log_info "[RESTORE] Appel de auto_maintenance.sh -r \"${TARGET_DIR}\""
+    bash "${SCRIPT_MAINTENANCE}" -r "${TARGET_DIR}"
+    local rc=$?
+    if [[ ${rc} -ne 0 ]]; then
+        log_error "[RESTORE] auto_maintenance.sh a échoué (code: ${rc})"
+    else
+        log_info "[RESTORE] auto_maintenance.sh terminé avec succès."
     fi
 
-    # ⚠️ NOTE : Ajoutez ici les étapes spécifiques à votre projet (ex: reset BDD,
-    # réinitialisation de fichiers de config, etc.) selon les besoins définis
-    # dans votre compte rendu.
+    # --- data_focus.sh : supporte -r (sans argument supplémentaire) ---
+    log_info "[RESTORE] Appel de data_focus.sh -r"
+    bash "${SCRIPT_DATA}" -r
+    rc=$?
+    if [[ ${rc} -ne 0 ]]; then
+        log_error "[RESTORE] data_focus.sh a échoué (code: ${rc})"
+    else
+        log_info "[RESTORE] data_focus.sh terminé avec succès."
+    fi
+
+    # --- module_securite.sh : pas d'option -r → non appelé ---
+    log_info "[RESTORE] module_securite.sh ne supporte pas -r → ignoré."
 
     log_info "=== RESTAURATION TERMINÉE ==="
 }
 
 # ==============================================================================
-# SECTION 8 : FONCTIONS D'EXÉCUTION DES MODULES
+# SECTION 8 : FONCTIONS D'EXÉCUTION DES MODULES PAR MODE
 # ==============================================================================
 
-# --- Sous-fonction : appelle un script collègue et vérifie son code de retour ---
-# Usage : _run_module <script_path> <target_dir>
-_run_module() {
-    local script="$1"
-    local target="$2"
-    local module_name
-    module_name="$(basename "${script}")"
-
-    log_info "  → Lancement du module : ${module_name} avec TARGET_DIR=${target}"
-
-    # Appel du script collègue avec TARGET_DIR en argument
-    # EMPLACEMENT RÉSERVÉ : seul l'appel est défini ici, pas le contenu métier.
-    bash "${script}" "${target}"
-    local exit_code=$?
-
-    # Vérification du code de retour du module
-    if [[ ${exit_code} -ne 0 ]]; then
-        log_error "  ✗ Échec du module ${module_name} (code de retour : ${exit_code})"
-        return "${ERR_MODULE_FAILED}"
-    else
-        log_info "  ✓ Module ${module_name} terminé avec succès."
-        return 0
-    fi
-}
-
-# -----------------------------------------------------------------------
-# run_normal : exécution séquentielle classique des modules
-# Les scripts sont exécutés l'un après l'autre dans l'ordre du tableau.
-# -----------------------------------------------------------------------
+# ---------------------------------------------------------------------------
+# run_normal : exécution séquentielle — appel de chaque script avec -h
+# Le mode normal affiche l'aide de chaque module l'un après l'autre.
+# ---------------------------------------------------------------------------
 run_normal() {
     log_info "=== MODE NORMAL : exécution séquentielle ==="
     local global_status=0
 
-    for script in "${COLLEAGUE_SCRIPTS[@]}"; do
-        _run_module "${script}" "${TARGET_DIR}"
-        if [[ $? -ne 0 ]]; then
-            global_status="${ERR_MODULE_FAILED}"
-        fi
-    done
+    # auto_maintenance.sh -h
+    log_info "  → auto_maintenance.sh -h"
+    bash "${SCRIPT_MAINTENANCE}" -h
+    local rc=$?
+    if [[ ${rc} -ne 0 ]]; then
+        log_error "  ✗ auto_maintenance.sh a échoué (code: ${rc})"
+        global_status="${ERR_MODULE_FAILED}"
+    else
+        log_info "  ✓ auto_maintenance.sh terminé avec succès."
+    fi
+
+    # data_focus.sh -h
+    log_info "  → data_focus.sh -h"
+    bash "${SCRIPT_DATA}" -h
+    rc=$?
+    if [[ ${rc} -ne 0 ]]; then
+        log_error "  ✗ data_focus.sh a échoué (code: ${rc})"
+        global_status="${ERR_MODULE_FAILED}"
+    else
+        log_info "  ✓ data_focus.sh terminé avec succès."
+    fi
+
+    # module_securite.sh -h
+    log_info "  → module_securite.sh -h"
+    bash "${SCRIPT_SECURITE}" -h
+    rc=$?
+    if [[ ${rc} -ne 0 ]]; then
+        log_error "  ✗ module_securite.sh a échoué (code: ${rc})"
+        global_status="${ERR_MODULE_FAILED}"
+    else
+        log_info "  ✓ module_securite.sh terminé avec succès."
+    fi
 
     if [[ ${global_status} -ne 0 ]]; then
         log_error "Un ou plusieurs modules ont échoué en mode normal."
@@ -384,41 +360,43 @@ run_normal() {
     log_info "=== MODE NORMAL : tous les modules terminés ==="
 }
 
-# -----------------------------------------------------------------------
-# run_fork : exécution parallèle via sous-processus (fork avec & et wait)
-# Chaque module est lancé en arrière-plan. Le script attend leur fin.
-# -----------------------------------------------------------------------
+# ---------------------------------------------------------------------------
+# run_fork : exécution parallèle via sous-processus (fork & + wait)
+# Chaque module est lancé avec l'option -f en arrière-plan.
+# On attend la fin de tous les processus fils avant de continuer.
+# ---------------------------------------------------------------------------
 run_fork() {
     log_info "=== MODE FORK : exécution parallèle par sous-processus ==="
-    local pids=()           # tableau des PIDs des processus fils
-    local scripts_map=()    # tableau des noms de scripts pour le suivi
+    local pids=()
+    local names=()
 
-    # Lancement de chaque module dans un sous-processus indépendant
-    for script in "${COLLEAGUE_SCRIPTS[@]}"; do
-        local module_name
-        module_name="$(basename "${script}")"
-        log_info "  [FORK] Création du sous-processus pour : ${module_name}"
+    # Lancement en parallèle avec l'option -f
+    log_info "  [FORK] Lancement de auto_maintenance.sh -f"
+    bash "${SCRIPT_MAINTENANCE}" -f &
+    pids+=($!)
+    names+=("auto_maintenance.sh")
 
-        # Fork : lancement en arrière-plan (&)
-        bash "${script}" "${TARGET_DIR}" &
-        local pid=$!
-        pids+=("${pid}")
-        scripts_map+=("${module_name}")
-        log_info "  [FORK] PID ${pid} → ${module_name}"
-    done
+    log_info "  [FORK] Lancement de data_focus.sh -f"
+    bash "${SCRIPT_DATA}" -f &
+    pids+=($!)
+    names+=("data_focus.sh")
 
-    # Attente de la fin de tous les processus fils
+    log_info "  [FORK] Lancement de module_securite.sh -f"
+    bash "${SCRIPT_SECURITE}" -f &
+    pids+=($!)
+    names+=("module_securite.sh")
+
+    # Attente et vérification de chaque processus fils
     log_info "  [FORK] Attente de la fin de tous les processus fils..."
     local global_status=0
-
     for i in "${!pids[@]}"; do
         wait "${pids[$i]}"
         local exit_code=$?
         if [[ ${exit_code} -ne 0 ]]; then
-            log_error "  [FORK] ✗ ${scripts_map[$i]} (PID ${pids[$i]}) a échoué (code: ${exit_code})"
+            log_error "  [FORK] ✗ ${names[$i]} (PID ${pids[$i]}) a échoué (code: ${exit_code})"
             global_status="${ERR_MODULE_FAILED}"
         else
-            log_info "  [FORK] ✓ ${scripts_map[$i]} (PID ${pids[$i]}) terminé avec succès."
+            log_info "  [FORK] ✓ ${names[$i]} (PID ${pids[$i]}) terminé avec succès."
         fi
     done
 
@@ -429,117 +407,118 @@ run_fork() {
     log_info "=== MODE FORK : tous les processus fils terminés ==="
 }
 
-# -----------------------------------------------------------------------
-# run_thread : simulation de parallélisme en Bash
-# En Bash, il n'y a pas de threads natifs. On simule le parallélisme
-# via des sous-processus en arrière-plan (comportement similaire au fork).
-# Si un outil externe threadé est disponible (ex: programme C compilé),
-# il peut être appelé ici sans casser le script s'il est absent.
-# -----------------------------------------------------------------------
+# ---------------------------------------------------------------------------
+# run_thread : simulation de parallélisme via sous-processus (option -t)
+# Bash ne dispose pas de threads natifs. Le parallélisme est simulé par des
+# sous-processus en arrière-plan, comme pour le mode fork.
+# NOTE : auto_maintenance.sh attend un argument après -t (liste de ports).
+#        On lui passe "22,80,443" par défaut.
+# ---------------------------------------------------------------------------
 run_thread() {
     log_info "=== MODE THREAD : simulation de parallélisme en Bash ==="
     log_info "  [INFO] Bash ne supporte pas les threads natifs."
-    log_info "  [INFO] Simulation via sous-processus parallèles (comme le mode fork)."
+    log_info "  [INFO] Simulation via sous-processus parallèles (comportement fork)."
 
-    # Vérification optionnelle : si un programme C threadé existe dans scripts/
-    # EMPLACEMENT RÉSERVÉ : remplacer par le vrai programme si disponible
-    local threaded_prog="${SCRIPTS_DIR}/threaded_runner"
-    if [[ -x "${threaded_prog}" ]]; then
-        log_info "  [THREAD] Programme threadé détecté : ${threaded_prog}"
-        log_info "  [THREAD] Délégation au programme externe..."
-        "${threaded_prog}" "${TARGET_DIR}" "${COLLEAGUE_SCRIPTS[@]}"
+    local pids=()
+    local names=()
+
+    # auto_maintenance.sh -t attend une liste de ports → "22,80,443" par défaut
+    log_info "  [THREAD] Lancement de auto_maintenance.sh -t \"22,80,443\""
+    bash "${SCRIPT_MAINTENANCE}" -t "22,80,443" &
+    pids+=($!)
+    names+=("auto_maintenance.sh")
+
+    log_info "  [THREAD] Lancement de data_focus.sh -t"
+    bash "${SCRIPT_DATA}" -t &
+    pids+=($!)
+    names+=("data_focus.sh")
+
+    log_info "  [THREAD] Lancement de module_securite.sh -t"
+    bash "${SCRIPT_SECURITE}" -t &
+    pids+=($!)
+    names+=("module_securite.sh")
+
+    # Attente et vérification de chaque processus fils
+    log_info "  [THREAD] Attente de la fin de tous les sous-processus..."
+    local global_status=0
+    for i in "${!pids[@]}"; do
+        wait "${pids[$i]}"
         local exit_code=$?
         if [[ ${exit_code} -ne 0 ]]; then
-            log_error "  [THREAD] Échec du programme threadé (code: ${exit_code})"
-            exit "${ERR_MODULE_FAILED}"
+            log_error "  [THREAD] ✗ ${names[$i]} (PID ${pids[$i]}) a échoué (code: ${exit_code})"
+            global_status="${ERR_MODULE_FAILED}"
+        else
+            log_info "  [THREAD] ✓ ${names[$i]} (PID ${pids[$i]}) terminé."
         fi
-        log_info "  [THREAD] Programme threadé terminé avec succès."
-    else
-        # Fallback : simulation par sous-processus parallèles (identique au fork)
-        log_info "  [THREAD] Programme threadé absent → simulation par sous-processus."
-        local pids=()
-        local scripts_map=()
+    done
 
-        for script in "${COLLEAGUE_SCRIPTS[@]}"; do
-            local module_name
-            module_name="$(basename "${script}")"
-            bash "${script}" "${TARGET_DIR}" &
-            local pid=$!
-            pids+=("${pid}")
-            scripts_map+=("${module_name}")
-            log_info "  [THREAD] Sous-processus lancé : ${module_name} (PID ${pid})"
-        done
-
-        local global_status=0
-        for i in "${!pids[@]}"; do
-            wait "${pids[$i]}"
-            local exit_code=$?
-            if [[ ${exit_code} -ne 0 ]]; then
-                log_error "  [THREAD] ✗ ${scripts_map[$i]} échoué (code: ${exit_code})"
-                global_status="${ERR_MODULE_FAILED}"
-            else
-                log_info "  [THREAD] ✓ ${scripts_map[$i]} terminé."
-            fi
-        done
-
-        if [[ ${global_status} -ne 0 ]]; then
-            exit "${global_status}"
-        fi
+    if [[ ${global_status} -ne 0 ]]; then
+        log_error "Un ou plusieurs modules ont échoué en mode thread."
+        exit "${global_status}"
     fi
-
     log_info "=== MODE THREAD : traitement terminé ==="
 }
 
-# -----------------------------------------------------------------------
-# run_subshell : exécution dans des sous-shells isolés (parenthèses)
-# Chaque module est exécuté dans un environnement isolé.
-# Les modifications de variables dans le sous-shell n'affectent pas le parent.
-# -----------------------------------------------------------------------
+# ---------------------------------------------------------------------------
+# run_subshell : exécution séquentielle dans un sous-shell isolé
+# Les trois modules sont appelés avec -s dans un seul bloc sous-shell.
+# Toute modification d'environnement reste locale au sous-shell.
+# ---------------------------------------------------------------------------
 run_subshell() {
-    log_info "=== MODE SUBSHELL : exécution dans des sous-shells isolés ==="
+    log_info "=== MODE SUBSHELL : exécution dans un sous-shell isolé ==="
     local global_status=0
 
-    for script in "${COLLEAGUE_SCRIPTS[@]}"; do
-        local module_name
-        module_name="$(basename "${script}")"
-        log_info "  [SUBSHELL] Lancement dans un sous-shell isolé : ${module_name}"
+    (
+        # Ce bloc s'exécute dans un sous-shell (environnement copié mais isolé)
+        log_info "  [SUBSHELL] Début du sous-shell (PID $$)"
 
-        # Exécution dans un sous-shell entre parenthèses
-        # L'environnement du shell parent est copié mais toute modification
-        # effectuée dans le sous-shell reste locale à celui-ci.
-        (
-            # Le sous-shell hérite des variables mais travaille en isolation
-            log_info "    [SUBSHELL] Début du sous-shell pour : ${module_name} (PID $$)"
-            bash "${script}" "${TARGET_DIR}"
-            local exit_code=$?
-            if [[ ${exit_code} -ne 0 ]]; then
-                log_error "    [SUBSHELL] ✗ ${module_name} échoué (code: ${exit_code})"
-                exit "${ERR_MODULE_FAILED}"
-            fi
-            log_info "    [SUBSHELL] ✓ ${module_name} terminé dans le sous-shell."
-        )
-
-        # Récupération du code de retour du sous-shell
-        local subshell_exit=$?
-        if [[ ${subshell_exit} -ne 0 ]]; then
-            log_error "  [SUBSHELL] Sous-shell pour ${module_name} a retourné une erreur."
-            global_status="${ERR_MODULE_FAILED}"
+        log_info "  [SUBSHELL] Lancement de auto_maintenance.sh -s"
+        bash "${SCRIPT_MAINTENANCE}" -s
+        if [[ $? -ne 0 ]]; then
+            log_error "  [SUBSHELL] ✗ auto_maintenance.sh a échoué."
+            exit "${ERR_MODULE_FAILED}"
         fi
-    done
+        log_info "  [SUBSHELL] ✓ auto_maintenance.sh terminé."
+
+        log_info "  [SUBSHELL] Lancement de data_focus.sh -s"
+        bash "${SCRIPT_DATA}" -s
+        if [[ $? -ne 0 ]]; then
+            log_error "  [SUBSHELL] ✗ data_focus.sh a échoué."
+            exit "${ERR_MODULE_FAILED}"
+        fi
+        log_info "  [SUBSHELL] ✓ data_focus.sh terminé."
+
+        log_info "  [SUBSHELL] Lancement de module_securite.sh -s"
+        bash "${SCRIPT_SECURITE}" -s
+        if [[ $? -ne 0 ]]; then
+            log_error "  [SUBSHELL] ✗ module_securite.sh a échoué."
+            exit "${ERR_MODULE_FAILED}"
+        fi
+        log_info "  [SUBSHELL] ✓ module_securite.sh terminé."
+
+        log_info "  [SUBSHELL] Tous les modules terminés dans le sous-shell."
+    )
+
+    # Récupération du code de retour du sous-shell
+    local subshell_exit=$?
+    if [[ ${subshell_exit} -ne 0 ]]; then
+        log_error "Le sous-shell a retourné une erreur (code: ${subshell_exit})."
+        global_status="${ERR_MODULE_FAILED}"
+    fi
 
     if [[ ${global_status} -ne 0 ]]; then
         log_error "Un ou plusieurs modules ont échoué en mode subshell."
         exit "${global_status}"
     fi
-    log_info "=== MODE SUBSHELL : tous les sous-shells terminés ==="
+    log_info "=== MODE SUBSHELL : sous-shell terminé avec succès ==="
 }
 
 # ==============================================================================
 # SECTION 9 : PARSING DES OPTIONS (getopts)
 # ==============================================================================
 
-# Affiche une erreur d'usage et quitte
-# Usage : usage_error "message d'erreur" <code_erreur>
+# usage_error : affiche un message d'erreur, l'aide, et quitte
+# Usage : usage_error "message" <code_erreur>
 usage_error() {
     local msg="$1"
     local code="${2:-${ERR_INVALID_OPTION}}"
@@ -548,41 +527,38 @@ usage_error() {
     exit "${code}"
 }
 
-# Parsing des options avec getopts
-# La chaîne "hftsl:r" définit les options acceptées :
-#   h, f, t, s, r → options sans argument
-#   l              → option avec argument (le : après l)
+# parse_options : analyse les options de la ligne de commande avec getopts
+# Options acceptées : h, f, t, s, r (sans argument) et l (avec argument)
 parse_options() {
     while getopts ":hftsl:r" opt; do
         case "${opt}" in
             h)
-                # Option -h : affichage de l'aide puis sortie propre
+                # Affichage de l'aide puis sortie propre
                 show_help
                 exit 0
                 ;;
             f)
-                # Option -f : activation du mode fork
+                # Activation du mode fork (exécution parallèle)
                 EXEC_MODE="fork"
                 ;;
             t)
-                # Option -t : activation du mode thread
+                # Activation du mode thread (parallélisme simulé)
                 EXEC_MODE="thread"
                 ;;
             s)
-                # Option -s : activation du mode subshell
+                # Activation du mode subshell (environnement isolé)
                 EXEC_MODE="subshell"
                 ;;
             l)
-                # Option -l : répertoire de log personnalisé
-                # $OPTARG contient la valeur passée après -l
+                # Répertoire de log personnalisé ($OPTARG contient la valeur)
                 LOG_DIR="${OPTARG}"
                 ;;
             r)
-                # Option -r : activation du mode restore (admin uniquement)
+                # Activation du mode restore (nécessite root)
                 OPT_RESTORE=true
                 ;;
             :)
-                # Option reconnue mais sans argument (ex: -l sans chemin)
+                # Option connue mais sans argument obligatoire (ex: -l sans chemin)
                 usage_error "L'option -${OPTARG} nécessite un argument." "${ERR_INVALID_OPTION}"
                 ;;
             \?)
@@ -592,14 +568,13 @@ parse_options() {
         esac
     done
 
-    # Décalage des arguments : après getopts, $@ ne contient plus les options
-    # $OPTIND pointe sur le premier argument non-option
+    # Décalage : $@ ne contient plus les options après getopts
     shift $((OPTIND - 1))
 
-    # Récupération du paramètre obligatoire TARGET_DIR
+    # Récupération du paramètre positionnel obligatoire TARGET_DIR
     TARGET_DIR="$1"
 
-    # Vérification que TARGET_DIR a bien été fourni
+    # Vérification de la présence de TARGET_DIR
     if [[ -z "${TARGET_DIR}" ]]; then
         usage_error "Paramètre obligatoire manquant : TARGET_DIR" "${ERR_MISSING_PARAM}"
     fi
@@ -609,7 +584,7 @@ parse_options() {
         usage_error "Le répertoire cible est invalide ou inaccessible : '${TARGET_DIR}'" "${ERR_INVALID_DIR}"
     fi
 
-    # Normalisation du chemin (résolution du chemin absolu)
+    # Normalisation : résolution du chemin absolu
     TARGET_DIR="$(realpath "${TARGET_DIR}")"
 }
 
@@ -637,14 +612,14 @@ main() {
 
     # --- Étape 4 : Traitement de l'option -r (restore) en priorité ---
     if [[ "${OPT_RESTORE}" == true ]]; then
-        # Vérification des privilèges administrateur (obligatoire pour -r)
+        # La restauration nécessite les droits root
         check_admin
         restore_defaults
         log_info "Restauration effectuée. Fin du programme."
         exit 0
     fi
 
-    # --- Étape 5 : Vérification des scripts des collègues ---
+    # --- Étape 5 : Vérification de la présence des scripts des collègues ---
     check_dependencies
 
     # --- Étape 6 : Exécution selon le mode choisi ---
