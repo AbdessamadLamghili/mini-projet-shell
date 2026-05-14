@@ -1,7 +1,32 @@
 #!/bin/bash
+
 # ============================================
 # module_securite.sh - Surveillance sécurité
-# TrinityOps - Module 3
+# TrinityOps - Module 3 — Team-A04
+# ============================================
+# USAGE: sudo bash module_securite.sh [OPTION]
+#
+# OPTIONS:
+#   -h   Afficher cette aide
+#   -f   FORK    : Surveillance des connexions SSH en parallèle
+#   -t   THREAD  : Détection d'attaques brute force
+#   -s   SUBSHELL: Vérification d'intégrité MD5 des fichiers
+#   -l   LOG     : Afficher le journal de sécurité
+#   -w N WATCH   : Surveillance continue toutes les N secondes
+#   -r   RESTORE : Restauration et archivage du journal
+#
+# CODES D'ERREUR:
+#   100 : Option invalide
+#   101 : Impossible de créer le dossier de log
+#   102 : Droits root requis
+#   103 : Fichier auth.log introuvable
+#
+# EXEMPLES:
+#   sudo bash module_securite.sh -f
+#   sudo bash module_securite.sh -t
+#   sudo bash module_securite.sh -s
+#   sudo bash module_securite.sh -w 30
+#   sudo bash module_securite.sh -l
 # ============================================
 
 LOG_DIR="/var/log/module_securite"
@@ -64,7 +89,7 @@ verifier_root() {
         echo "Relance avec : sudo bash module_securite.sh [flag]"
         exit $ERR_PERMISSION
     fi
-    log "INFO" "Vérification root : OK (UID=$EUID)"
+    #log "INFO" "Vérification root : OK (UID=$EUID)"
 }
 
 # ============================================
@@ -84,6 +109,7 @@ OPTIONS:
   -s   SUBSHELL: Vérification d'intégrité MD5 des fichiers
   -l   LOG     : Afficher le journal de sécurité
   -w   WATCH  : Surveillance continue (ex: -w 30 pour toutes les 30s)
+  -r   RESTORE : Restauration et archivage du journal (root requis)
 
 CODES D'ERREUR:
   100 : Option invalide
@@ -390,6 +416,39 @@ surveiller_watchmode() {
 
 
 # ============================================
+# Fonction : option_restore()
+# ============================================
+option_restore() {
+    if [ "$EUID" -ne 0 ]; then
+        log "ERROR" "Option -r nécessite les droits root"
+        afficher_aide
+        exit $ERR_PERMISSION
+    fi
+
+    log "INFO" "=== Restauration démarrée ==="
+
+    # Suppression de la référence MD5
+    if [ -f "$REFERENCE_MD5" ]; then
+        rm -f "$REFERENCE_MD5"
+        log "INFO" "Référence MD5 supprimée"
+        echo "Référence MD5 supprimée."
+    fi
+
+    # Archivage du journal avant réinitialisation
+    if [ -f "$LOG_FILE" ]; then
+        archive="${LOG_DIR}/history_backup_$(date '+%Y%m%d_%H%M%S').log"
+        mv "$LOG_FILE" "$archive"
+        touch "$LOG_FILE"
+        log "INFO" "Journal archivé : $archive"
+        echo "Journal archivé : $archive"
+    fi
+
+    log "INFO" "=== Restauration terminée ==="
+    echo "Restauration terminée."
+}
+
+
+# ============================================
 # Point d'entrée principal
 # ============================================
 init
@@ -401,7 +460,7 @@ if [ $# -eq 0 ]; then
     exit $ERR_OPTION
 fi
 
-while getopts ":hftslw:" opt; do
+while getopts ":hftslw:r" opt; do
     case $opt in
         h) afficher_aide ;;
         f) surveillance_ssh_fork ;;
@@ -409,7 +468,9 @@ while getopts ":hftslw:" opt; do
         s) verifier_md5 ;;
         l) afficher_logs ;;
         w) surveiller_watchmode "$OPTARG" ;;
-        \?) echo "Option invalide : -$OPTARG. Utilise -h pour l'aide."
+        r) option_restore ;;
+       \?) echo "Option invalide : -$OPTARG."
+            afficher_aide
             exit $ERR_OPTION ;;
     esac
 done
