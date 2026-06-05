@@ -1,6 +1,6 @@
 # TrinityOps : Mini Projet Shell
 
-**Équipe : Team-A04 **  
+**Équipe : Team-A04**  
 **Encadrant : Pr. Abdellah Ouaguid**
 
 > « Un script Bash modulaire unifiant trois volets : maintenance, sécurité et gestion de données. »
