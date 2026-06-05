@@ -1,4 +1,4 @@
-# TrinityOps — Mini Projet Shell
+# TrinityOps : Mini Projet Shell
 
 **Équipe : Team-A04 | ENSET Mohammedia 2026**  
 **Encadrant : Pr. Abdellah Ouaguid**
