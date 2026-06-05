@@ -12,7 +12,7 @@
 #   -t   THREAD  : Détection d'attaques brute force
 #   -s   SUBSHELL: Vérification d'intégrité MD5 des fichiers
 #   -l   LOG     : Afficher le journal de sécurité
-#   -w N WATCH   : Surveillance continue toutes les N secondes
+#   -w  WATCH   : Surveillance continue toutes les N secondes
 #   -r   RESTORE : Restauration et archivage du journal
 #
 # CODES D'ERREUR:
